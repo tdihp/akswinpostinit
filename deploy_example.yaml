@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: akswinpostinit-config
+  namespace: kube-system
+data:
+  subscription: "00000000-0000-0000-0000-000000000000"
+  script: |
+    [System.Environment]::OSVersion.Version
+---
+# to get the content:
+# az ad sp create-for-rbac --name ServicePrincipalName --role "Virtual Machine Contributor" \
+#   --scope /subscriptions/0b1f6471-1bf0-4dda-aec3-111122223333/resourceGroups/node-resource-group
+apiVersion: v1
+kind: Secret
+metadata:
+  name: akswinpostinit-secret
+  namespace: kube-system
+type: Opaque
+stringData:
+  AZURE_TENANT_ID: "00000000-0000-0000-0000-000000000000"
+  AZURE_CLIENT_ID: "00000000-0000-0000-0000-000000000000"
+  AZURE_CLIENT_SECRET: ""
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: akswinpostinit
+  namespace: kube-system
+  labels:
+    app: akswinpostinit
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: akswinpostinit
+  labels:
+    app: akswinpostinit
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akswinpostinit
+  labels:
+    app: akswinpostinit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: akswinpostinit
+subjects:
+- kind: ServiceAccount
+  name: akswinpostinit
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akswinpostinit
+  namespace: kube-system
+  labels:
+    app: akswinpostinit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akswinpostinit
+  template:
+    metadata:
+      labels:
+        app: akswinpostinit
+    spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
+        kubernetes.azure.com/mode: system
+      serviceAccountName: akswinpostinit
+      containers:
+      - name: akswinpostinit
+        image: tdihp/akswinpostinit:latest
+        args: ['--subscription', '$(subscription)', '--script', '$(script)', '-v']
+        envFrom:
+          - secretRef:
+              name: akswinpostinit-secret
+          - configMapRef:
+              name: akswinpostinit-config

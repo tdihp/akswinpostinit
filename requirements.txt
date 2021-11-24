@@ -1,0 +1,3 @@
+kubernetes
+azure-mgmt-compute
+azure-identity
